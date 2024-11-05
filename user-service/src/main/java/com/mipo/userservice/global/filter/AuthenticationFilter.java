@@ -64,6 +64,7 @@ public class AuthenticationFilter extends UsernamePasswordAuthenticationFilter {
 		SecretKey secretKey = Keys.hmacShaKeyFor(secretKeyBytes);
 		String token = Jwts.builder()
 			.subject(user.getUserUUID())
+			.claim("role", user.getRole())
 			.expiration(Date.from(now.plusMillis(Long.parseLong(env.getProperty("token.expiration_time")))))
 			.issuedAt(Date.from(now))
 			.signWith(secretKey)
