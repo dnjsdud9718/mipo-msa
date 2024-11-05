@@ -46,10 +46,10 @@ public class SecurityConfig {
 		managerBuilder.userDetailsService(userService).passwordEncoder(passwordEncoder);
 		AuthenticationManager authenticationManager = managerBuilder.build();
 
-		return http.csrf(AbstractHttpConfigurer::disable)
+		return http
+			.csrf(AbstractHttpConfigurer::disable)
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers(new AntPathRequestMatcher("/users", "POST")).permitAll()
-				.requestMatchers(new AntPathRequestMatcher("/healthcheck")).permitAll()
 				.requestMatchers("/**").access(
 					new WebExpressionAuthorizationManager("hasIpAddress('127.0.0.1')")
 				)
@@ -59,7 +59,6 @@ public class SecurityConfig {
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.addFilterBefore(getAuthenticationFilter(authenticationManager),
 				UsernamePasswordAuthenticationFilter.class)
-			.httpBasic(Customizer.withDefaults())
 			.build();
 	}
 	private AuthorizationDecision hasIpAddress(Supplier<Authentication> authentication, RequestAuthorizationContext object) {

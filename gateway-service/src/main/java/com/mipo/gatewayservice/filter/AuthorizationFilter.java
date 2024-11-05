@@ -1,6 +1,9 @@
 package com.mipo.gatewayservice.filter;
 
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import javax.crypto.SecretKey;
 
@@ -35,39 +38,49 @@ public class AuthorizationFilter extends AbstractGatewayFilterFactory<Authorizat
 	public GatewayFilter apply(Config config) {
 		return (((exchange, chain) -> {
 			ServerHttpRequest request = exchange.getRequest();
-
 			if (!request.getHeaders().containsKey(HttpHeaders.AUTHORIZATION)) {
 				return onError(exchange, "no authorization header", HttpStatus.UNAUTHORIZED);
 			}
 			String authorizationHeader = request.getHeaders().get(HttpHeaders.AUTHORIZATION).get(0);
 			String jwt = authorizationHeader.replace("Bearer ", "");
-			if (!isJwtValid(jwt)) {
+			String requiredRole = config.getRequiredRole();
+			Map<String, String> map = getSubjectAndRole(jwt);
+			if (map == null) {
 				return onError(exchange, "JWT token is not valid", HttpStatus.UNAUTHORIZED);
+			}
+			if (!isRoleValid(requiredRole, map.get("role"))) {
+				return onError(exchange, "ROLE is not valid", HttpStatus.FORBIDDEN);
 			}
 			return chain.filter(exchange);
 		}));
 	}
 
-	private boolean isJwtValid(String jwt) {
+	private boolean isRoleValid(String requiredRole, String role) {
+		if(requiredRole == null)
+			return true;
+		return requiredRole.equals(role);
+	}
+
+	private Map<String, String> getSubjectAndRole(String jwt) {
 		byte[] secretKeyBytes = Base64.getEncoder().encode(env.getProperty("token.secret").getBytes());
 		SecretKey signingKey = Keys.hmacShaKeyFor(secretKeyBytes);
 
-		boolean returnValue = true;
 		String subject = null;
-
+		String role = null;
 		try {
 			JwtParser jwtParser = Jwts.parser().verifyWith(signingKey).build();
-
 			subject = jwtParser.parseSignedClaims(jwt).getPayload().getSubject();
+			role = jwtParser.parseSignedClaims(jwt).getPayload().get("role", String.class);
 		} catch (Exception ex) {
-			returnValue = false;
+			return null;
 		}
-
 		if (subject == null || subject.isEmpty()) {
-			returnValue = false;
+			return null;
 		}
-		// TODO -> subject 와 email 비교:(로그인 계정 이메일을 레디스에 보관해두었다가 비교하면 어떨까?)
-		return returnValue;
+		Map<String, String> map = new HashMap<>();
+		map.put("subject", subject);
+		map.put("role", role);
+		return map;
 	}
 
 	private Mono<Void> onError(ServerWebExchange exchange, String message, HttpStatus httpStatus) {
@@ -78,7 +91,15 @@ public class AuthorizationFilter extends AbstractGatewayFilterFactory<Authorizat
 	}
 
 	public static class Config {
+		private String requiredRole;
 
+		public String getRequiredRole() {
+			return requiredRole;
+		}
+
+		public void setRequiredRole(String requiredRole) {
+			this.requiredRole = requiredRole;
+		}
 	}
 
 }
